@@ -5,9 +5,12 @@ import {
   FlatList,
   Modal,
   Text,
+  Alert,
+  Linking,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useState, useCallback } from "react";
 
 import { styles } from "./styles";
 import { colors } from "@/styles/colors";
@@ -15,11 +18,73 @@ import { colors } from "@/styles/colors";
 import { Link } from "@/components/link";
 import { Option } from "@/components/option";
 import { Categories } from "@/components/categories";
-import { useState } from "react";
 import { categories } from "@/utils/categories";
+import { LinkStorage } from "@/storage/link-storage";
 
 export default function Index() {
+  const [showModal, setShowModal] = useState(false);
+  const [link, setLink] = useState<LinkStorage>({} as LinkStorage);
+  const [links, setLinks] = useState<LinkStorage[]>([]);
   const [category, setCategory] = useState(categories[0].name);
+
+  async function getLinks() {
+    try {
+      const response = await LinkStorage.get();
+
+      const filtered = response.filter((link) => link.category === category);
+
+      setLinks(filtered);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível carregar os links");
+      console.log(error);
+    }
+  }
+
+  function handleDetails(selected: LinkStorage) {
+    setShowModal(true);
+    setLink(selected);
+  }
+
+  async function linkRemove() {
+    try {
+      await LinkStorage.remove(link.id);
+      getLinks();
+      setShowModal(false);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível remover o link");
+      console.log(error);
+    }
+  }
+
+  function handleRemove() {
+    Alert.alert("Excluir", "Deseja realmente excluir o link?", [
+      {
+        style: "cancel",
+        text: "Não",
+      },
+      {
+        text: "Sim",
+        onPress: linkRemove,
+      },
+    ]);
+    getLinks();
+  }
+
+  async function handleOpen() {
+    try {
+      await Linking.openURL(link.url);
+      setShowModal(false);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível abrir o link");
+      console.log(error);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      getLinks();
+    }, [category])
+  );
 
   return (
     <View style={styles.container}>
@@ -33,13 +98,13 @@ export default function Index() {
       <Categories onChange={setCategory} selected={category} />
 
       <FlatList
-        data={[1, 2, 3]}
-        keyExtractor={(item) => item.toString()}
-        renderItem={() => (
+        data={links}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
           <Link
-            name="Google"
-            url="https://google.com.br"
-            onDetails={() => console.log("Clicou!")}
+            name={item.name}
+            url={item.url}
+            onDetails={() => handleDetails(item)}
           />
         )}
         style={styles.links}
@@ -47,12 +112,12 @@ export default function Index() {
         showsVerticalScrollIndicator={false}
       />
 
-      <Modal transparent visible={false}>
+      <Modal transparent visible={showModal} animationType="slide">
         <View style={styles.modal}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalCategory}>Curso</Text>
-              <TouchableOpacity>
+              <Text style={styles.modalCategory}>{link.category}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
                 <MaterialIcons
                   name="close"
                   size={20}
@@ -60,12 +125,17 @@ export default function Index() {
                 />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalLinkName}>Google</Text>
-            <Text style={styles.modalUrl}>https://google.com.br</Text>
+            <Text style={styles.modalLinkName}>{link.category}</Text>
+            <Text style={styles.modalUrl}>{link.url}</Text>
 
             <View style={styles.modalFooter}>
-              <Option name="Excluir" icon="delete" variant="secondary" />
-              <Option name="Abrir" icon="language" />
+              <Option
+                name="Excluir"
+                icon="delete"
+                variant="secondary"
+                onPress={handleRemove}
+              />
+              <Option name="Abrir" icon="language" onPress={handleOpen} />
             </View>
           </View>
         </View>
